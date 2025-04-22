@@ -1,6 +1,7 @@
 # Orellis: Local Codebase AI Assistant
 
 > **Orellis** is a Model Context Protocol (MCP) server that lets engineers query and explore their local Python codebase via natural language. It embeds code files, indexes them with FAISS, and runs a local LLM (Ollama) on CPU for secure, private onboarding assistance.
+**All inference remains CPU optimized and runs on your local machine—your codebase never leaves your laptop**
 
 ---
 
@@ -69,13 +70,13 @@
     }
     ```
 3. **Interact**
-    - Restart claude desktop completly
+    - Restart claude desktop completely
     - Wait till you see this:
-        image
-    - Provide full path of python projecct and ask a question about it or ask for a walkthrough
-    - After you provide the path once  you dont need to provide it again only if you want to switch projects 
+        image<img width="555" alt="Screenshot 2025-04-22 121927" src="https://github.com/user-attachments/assets/7ed678b9-5ac8-4348-bf04-f28ed0f3eb94" />
 
-4. ** All inference remains CPU optimized and runs on your local machine—your codebase never leaves your laptop. **
+    - Provide full path of python projecct and ask a question about it or ask for a walkthrough
+    - After you provide the path once  you dont need to provide it again only if you want to switch projects
+   
 
 ---
 
