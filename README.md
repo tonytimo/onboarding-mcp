@@ -72,7 +72,7 @@
 3. **Interact**
     - Restart claude desktop completely
     - Wait till you see this:
-        image<img width="555" alt="Screenshot 2025-04-22 121927" src="https://github.com/user-attachments/assets/7ed678b9-5ac8-4348-bf04-f28ed0f3eb94" />
+    - <img width="555" alt="Screenshot 2025-04-22 121927" src="https://github.com/user-attachments/assets/7ed678b9-5ac8-4348-bf04-f28ed0f3eb94" />
 
     - Provide full path of python projecct and ask a question about it or ask for a walkthrough
     - After you provide the path once  you dont need to provide it again only if you want to switch projects
