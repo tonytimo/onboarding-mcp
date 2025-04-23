@@ -94,14 +94,4 @@ Orellis uses a local Ollama‑hosted model (`deepseek-coder:1.3b-instruct`) by d
 3. **Restart the server**:
    - Restart claude desktop completely 
 
----
-
-
-## 🔧 Performance Tips
-
-- **Use Quantized Models**: 4-bit Q4_1 via llama.cpp or Ollama to reduce inference time ~3–4×.
-- **Async Batching**: Leverage `onboarding_walkthrough`’s parallel asks to minimize wall-clock time.
-- **IVF FAISS Index**: For large codebases (>10k chunks), switch to an IVF index for sub‑100 ms queries.
-- **Caching**: Built-in `_project_cache` avoids re-indexing on every call.
-
 
