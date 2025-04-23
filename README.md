@@ -55,17 +55,17 @@
    - Change the contents of the config file:
     - Open Claude Desktop and go to **File → Settings → Developer**.
     - Click on **Edit Config**
-    - Open claude_desktop_config.json file
+    - Open `claude_desktop_config.json` file
     - Copy this in:
-    ```bash
+    ```json
     {
-    "mcpServers": {
+      "mcpServers": {
         "orellis": {
-        "command": "<full path to the project you cloned>\\.venv\\Scripts\\python.exe",
-        "args": [
+          "command": "<full path to the project you cloned>\\.venv\\Scripts\\python.exe",
+          "args": [
             "<full path to the project you cloned>\\src\\server.py"
-        ]
-        }
+            ]
+          }
         }
     }
     ```
