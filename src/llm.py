@@ -11,7 +11,7 @@ MODEL = "deepseek-coder:1.3b-instruct"
 client = AsyncClient(host=OLLAMA_URL)
 
 
-def ensure_ollama_ready() -> None:
+def ensure_model_ready() -> None:
     if not shutil.which("ollama"):
         print("Ollama not found. Install it from https://ollama.com/download")
         sys.exit(1)
@@ -32,11 +32,13 @@ async def ask_local(prompt: str) -> str | None:
     Returns the completion text.
     """
     start = time.time()
-    ensure_ollama_ready()
     response = await client.chat(
         model=MODEL,
         messages=[
-            {"role": "system", "content": "You are a helpful AI code assistant."},
+            {
+                "role": "system",
+                "content": "You are a helpful AI code/project assistant.",
+            },
             {"role": "user", "content": prompt},
         ],
     )

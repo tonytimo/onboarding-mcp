@@ -6,13 +6,17 @@ import asyncio
 
 from embedder import index_code_chunks
 from search import search_code
-from llm import ask_local
+from llm import ask_local, ensure_model_ready
 
 
 def log(msg):
     print(f"[orellis] {msg}", file=sys.stderr)
 
 
+# Ensure the model is ready
+ensure_model_ready()
+
+# Create the MCP server
 app = FastMCP("orellis")
 
 # In-memory cache keyed by project path
@@ -57,7 +61,7 @@ def get_indexed_code(
 
 
 @app.tool()
-def ask_codebase(project_path: str, question: str):
+async def ask_codebase(project_path: str, question: str) -> str | None:
     "Ask a natural-language question about the codebase"
     log(f"🤖 ask_codebase: {question} on {project_path}")
     _, index, texts, paths = get_indexed_code(project_path)
@@ -71,11 +75,12 @@ def ask_codebase(project_path: str, question: str):
         f"{context_str}\n\n---\n\n"
         f"Question: {question}\n"
     )
-    return ask_local(prompt)
+    return await ask_local(prompt)
 
 
 @app.tool()
 async def onboarding_walkthrough(project_path: str) -> str:
+    "Generate a summary of the codebase for onboarding"
     log(f"🚀 Starting walkthrough for {project_path}")
     # Load code chunks (sync)
     chunks, _, _, _ = get_indexed_code(project_path)
