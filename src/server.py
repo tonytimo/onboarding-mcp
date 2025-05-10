@@ -1,4 +1,4 @@
-from faiss import IndexFlatL2
+from typing import Optional
 from mcp.server.fastmcp import FastMCP
 from pathlib import Path
 import sys
@@ -7,6 +7,7 @@ import asyncio
 from embedder import index_code_chunks
 from search import search_code
 from llm import ask_local, ensure_model_ready
+from config import CODE_EXTENSIONS
 
 
 def log(msg):
@@ -29,13 +30,20 @@ def list_files(project_path: str) -> list[str]:
     root = Path(project_path).resolve()
     if not root.exists():
         raise FileNotFoundError(f"Project path {project_path} does not exist")
-    return [
-        str(p.relative_to(root))
-        for p in root.rglob("*.py")
-        if not any(
-            ex in p.parts for ex in [".venv", ".git", "node_modules", "__pycache__"]
+
+    files = []
+    for ext in CODE_EXTENSIONS:
+        files.extend(
+            [
+                str(p.relative_to(root))
+                for p in root.rglob(f"*{ext}")
+                if not any(
+                    ex in p.parts
+                    for ex in [".venv", ".git", "node_modules", "__pycache__"]
+                )
+            ]
         )
-    ]
+    return files
 
 
 @app.resource("code:///{full_path}")
@@ -45,27 +53,30 @@ def get_code(full_path: str) -> str:
     return p.read_text(encoding="utf‑8")
 
 
-def get_indexed_code(
-    project_path: str,
-) -> tuple[list[tuple[str, str]], IndexFlatL2, list[str], list[str]]:
+def get_indexed_code(project_path: str):
     log(f"🧠 Getting indexed code for {project_path}")
     if project_path in _project_cache:
         return _project_cache[project_path]
 
+    # Get list of file paths
     files = list_files(project_path)
-    chunks = [(fp, get_code(f"{project_path}\\{fp}")) for fp in files]
-    index, texts, paths = index_code_chunks(chunks)
 
-    _project_cache[project_path] = (chunks, index, texts, paths)
-    return chunks, index, texts, paths
+    # Create vectorstore directly from files
+    vectorstore = index_code_chunks(files, project_path)
+
+    # Store in cache
+    _project_cache[project_path] = vectorstore
+    return vectorstore
 
 
 @app.tool()
 async def ask_codebase(project_path: str, question: str) -> str | None:
     "Ask a natural-language question about the codebase"
     log(f"🤖 ask_codebase: {question} on {project_path}")
-    _, index, texts, paths = get_indexed_code(project_path)
-    context_chunks = search_code(question, index, texts, paths)
+
+    vectorstore = get_indexed_code(project_path)
+    context_chunks = search_code(question, vectorstore)
+
     # Assemble context into a single prompt
     context_str = "\n\n---\n\n".join(
         [f"# File: {path}\n{code}" for path, code in context_chunks]
@@ -79,31 +90,83 @@ async def ask_codebase(project_path: str, question: str) -> str | None:
 
 
 @app.tool()
-async def onboarding_walkthrough(project_path: str) -> str:
+async def onboarding_walkthrough(
+    project_path: str, focus_dir: Optional[str] = None, max_files: Optional[int] = None
+) -> str:
     "Generate a summary of the codebase for onboarding"
     log(f"🚀 Starting walkthrough for {project_path}")
-    # Load code chunks (sync)
-    chunks, _, _, _ = get_indexed_code(project_path)
 
-    # Build one prompt per file (or per batch)
-    tasks = []
-    for path, code in chunks:
-        prompt = (
-            f"Summarize this file for a new developer:\n\n"
-            f"File: {path}\n"
-            f"Code:\n{code}"
-        )
-        tasks.append(ask_local(prompt))
+    # Get project files, optionally filtered by directory
+    files = list_files(project_path)
+    if focus_dir:
+        files = [f for f in files if f.startswith(focus_dir)]
 
-    # Fire them all off in parallel, await them together
-    summaries = await asyncio.gather(*tasks)
+    # Allow limiting the number of files for large projects
+    if max_files and len(files) > max_files:
+        log(f"Limiting analysis to {max_files} files out of {len(files)} total")
+        files = files[:max_files]
 
-    # Combine with headings
-    out = []
-    for (path, _), summary in zip(chunks, summaries):
-        out.append(f"## {path}\n{summary}")
+    # Group files by directory for better organization
+    files_by_dir = {}
+    for file_path in files:
+        dir_path = Path(file_path).parent.as_posix()
+        if dir_path not in files_by_dir:
+            files_by_dir[dir_path] = []
+        files_by_dir[dir_path].append(file_path)
 
-    return "\n\n".join(out)
+    # First, generate project overview using directory structure
+    dir_structure = "\n".join(
+        [f"- {dir_path}/ ({len(files)})" for dir_path, files in files_by_dir.items()]
+    )
+    overview_prompt = f"""
+    You're analyzing a codebase with the following structure:
+    
+    {dir_structure}
+    
+    Based on this directory structure alone, provide a high-level overview of what this 
+    project might be about and how it's organized. Keep it brief (2-3 paragraphs).
+    """
+
+    # Process files by directory to maintain context
+    dir_tasks = []
+    for dir_path, dir_files in files_by_dir.items():
+        # Get content for all files in this directory
+        dir_contents = []
+        for file_path in dir_files:
+            try:
+                content = get_code(f"{project_path}/{file_path}")
+                dir_contents.append((file_path, content))
+            except Exception as e:
+                log(f"Error reading {file_path}: {str(e)}")
+
+        # Create a prompt that analyzes files in this directory together
+        if dir_contents:
+            dir_prompt = f"Analyze these related files from directory '{dir_path}':\n\n"
+            for path, code in dir_contents:
+                dir_prompt += f"--- FILE: {path} ---\n{code}\n\n"
+
+            dir_prompt += "\nProvide a summary of this directory's purpose and how these files work together. For each file, give 1-2 sentences about its role."
+            dir_tasks.append(ask_local(dir_prompt))
+
+    # Execute all tasks
+    overview_task = ask_local(overview_prompt)
+    dir_summaries = await asyncio.gather(overview_task, *dir_tasks)
+
+    # Format the output
+    overview = dir_summaries[0]
+    section_summaries = dir_summaries[1:]
+
+    # Create a structured output
+    if not overview:
+        overview = "A Problem as occured, No overview generated."
+
+    out = ["# Project Overview\n\n" + overview + "\n\n", "# Codebase Walkthrough\n"]
+
+    for i, (dir_path, _) in enumerate(files_by_dir.items()):
+        if i < len(section_summaries):
+            out.append(f"## Directory: {dir_path}\n{section_summaries[i]}\n")
+
+    return "\n".join(out)
 
 
 if __name__ == "__main__":

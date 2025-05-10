@@ -3,12 +3,15 @@ import subprocess
 import sys
 import time
 import asyncio
-from ollama import AsyncClient
+
+from langchain_ollama import OllamaLLM
+from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 
 
 OLLAMA_URL = "http://localhost:11434"
 MODEL = "deepseek-coder:1.3b-instruct"
-client = AsyncClient(host=OLLAMA_URL)
 
 
 def ensure_model_ready() -> None:
@@ -26,21 +29,33 @@ def ensure_model_ready() -> None:
         sys.exit(1)
 
 
+# Initialize LangChain Ollama LLM
+ollama_llm = OllamaLLM(
+    model=MODEL,
+    base_url=OLLAMA_URL,
+)
+
+
 async def ask_local(prompt: str) -> str | None:
     """
-    Send a prompt to Ollama using the AsyncClient.
+    Send a prompt to Ollama using LangChain.
     Returns the completion text.
     """
     start = time.time()
-    response = await client.chat(
-        model=MODEL,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a helpful AI code/project assistant.",
-            },
-            {"role": "user", "content": prompt},
-        ],
+
+    # Create a LangChain chain
+    chat_prompt = ChatPromptTemplate.from_messages(
+        [
+            SystemMessage(content="You are a helpful AI code/project assistant."),
+            HumanMessage(content="{input}"),
+        ]
     )
+
+    chain = chat_prompt | ollama_llm | StrOutputParser()
+
+    # Execute in a separate thread to avoid blocking the event loop
+    loop = asyncio.get_event_loop()
+    response = await loop.run_in_executor(None, lambda: chain.invoke({"input": prompt}))
+
     print(f"⏱️ Step -LLM- took {time.time() - start:.2f}s", file=sys.stderr)
-    return response.message.content
+    return response

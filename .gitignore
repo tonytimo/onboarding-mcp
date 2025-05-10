@@ -12,5 +12,3 @@ wheels/
 # visual studio code
 .vscode/
 
-# uv 
-uv.lock
